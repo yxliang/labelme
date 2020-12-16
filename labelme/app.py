@@ -13,7 +13,7 @@ from qtpy.QtCore import Qt
 from qtpy import QtGui
 from qtpy import QtWidgets
 
-from labelme import __appname__
+from labelme import __appname__, __version__
 from labelme import PY2
 from labelme import QT5
 
@@ -32,6 +32,7 @@ from labelme.widgets import ToolBar
 from labelme.widgets import UniqueLabelQListWidget
 from labelme.widgets import ZoomWidget
 
+from . import OreSeg
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -1432,6 +1433,40 @@ class MainWindow(QtWidgets.QMainWindow):
         # assumes same name, but json extension
         self.status(self.tr("Loading %s...") % osp.basename(str(filename)))
         label_file = osp.splitext(filename)[0] + ".json"
+
+        # TODO:如果没有标注，初始化一个分割标注
+        import json
+        import base64
+
+        if not QtCore.QFile.exists(label_file):
+            polygons, img_w, img_h = OreSeg.simp_seg(filename)
+
+            shape_list = []
+            for p in polygons:
+                shape = dict(
+                    label="Unknown",
+                    points=p.tolist(), 
+                    group_id=None,
+                    shape_type= "polygon",
+                    flags= {}
+                )
+                shape_list.append(shape)
+
+            if(shape_list):
+                data = dict(
+                    version=__version__,
+                    flags={},
+                    shapes=shape_list,
+                    imagePath=osp.split(filename)[-1],
+                    imageData=self.imageData, #base64.b64encode(LabelFile.load_image_file(filename)).decode(),
+                    imageHeight=img_h,
+                    imageWidth=img_w          
+                )
+
+                with open(label_file, "w") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+        # END
+
         if self.output_dir:
             label_file_without_path = osp.basename(label_file)
             label_file = osp.join(self.output_dir, label_file_without_path)
